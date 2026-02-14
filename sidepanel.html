@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Image Sender</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Image Sender</h1>
+
+    <div class="section">
+      <label>Run Mode</label>
+      <select id="runMode">
+        <option value="manual" selected>Manual</option>
+        <option value="auto">Auto</option>
+      </select>
+      <div class="info-text">Manual: selected folder to current chat. Auto: subfolder mapped chat routing.</div>
+    </div>
+
+    <div id="manualSection" class="section">
+      <label>Select Folder</label>
+      <button id="selectFolder" class="btn btn-secondary">Choose Folder</button>
+      <div id="folderInfo" class="info-text">No folder selected</div>
+    </div>
+
+    <div id="autoSection" class="section hidden">
+      <label>Base Folder (contains subfolders)</label>
+      <button id="selectBaseFolder" class="btn btn-secondary">Choose Base Folder</button>
+      <div id="baseFolderInfo" class="info-text">No base folder selected</div>
+      <div id="mappingInfo" class="info-text">Mapping source: mapping.json (extension root)</div>
+      <div id="autoJobsInfo" class="info-text">No mapped folders ready</div>
+    </div>
+
+    <div class="section">
+      <label>Send Mode</label>
+      <select id="sendMode">
+        <option value="single" selected>Single (one by one)</option>
+        <option value="batch">Batch (fast chunks)</option>
+      </select>
+      <div class="info-text">Default is Single</div>
+    </div>
+
+    <div class="section">
+      <label>Default Caption</label>
+      <input type="text" id="caption" value="." placeholder="Enter default caption (. for dot)">
+      <div class="info-text">Applied to every image</div>
+    </div>
+
+    <div class="section">
+      <label>Batch Size</label>
+      <input type="number" id="batchSize" value="10" min="1" max="50">
+      <div class="info-text">Fast chunk size; images are still sent one by one</div>
+    </div>
+
+    <div class="section">
+      <label>Delay Between Sends (seconds)</label>
+      <input type="number" id="delay" value="5" min="1" max="60">
+      <div class="info-text">Single: delay per image. Batch: delay between chunks only</div>
+    </div>
+
+    <div class="section">
+      <button id="startBtn" class="btn btn-primary" disabled>Start Sending</button>
+    </div>
+
+    <div id="progressSection" class="section hidden">
+      <div class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+      <div id="progressText" class="progress-text">0 / 0</div>
+    </div>
+
+    <div id="statsSection" class="section hidden">
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Sent</span>
+          <span id="sentCount" class="stat-value success">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Failed</span>
+          <span id="failedCount" class="stat-value error">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Pending</span>
+          <span id="pendingCount" class="stat-value pending">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="currentImage" class="section hidden">
+      <label>Current Item</label>
+      <div id="currentImageName" class="current-image-name"></div>
+    </div>
+
+    <div id="logSection" class="section">
+      <label>Activity Log</label>
+      <div id="logContainer" class="log-container"></div>
+    </div>
+
+    <div id="statusMessage" class="status-message"></div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
