@@ -5,6 +5,7 @@
   "description": "Send images from local folder to WhatsApp groups",
   "permissions": [
     "activeTab",
+    "tabs",
     "scripting",
     "storage",
     "sidePanel",
