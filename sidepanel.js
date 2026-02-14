@@ -1,5 +1,6 @@
 let manualImageFiles = [];
 let autoJobs = [];
+let autoFolderResults = [];
 let mappingLower = new Map();
 let baseFolderHandle = null;
 
@@ -9,6 +10,11 @@ let failedCount = 0;
 let failedImages = [];
 let totalPlanned = 0;
 let processedCount = 0;
+let autoTotalFolderCount = 0;
+let autoStaticSkippedCount = 0;
+let autoCompletedCount = 0;
+let autoIncompleteCount = 0;
+let autoSkippedCount = 0;
 
 const runModeInput = document.getElementById('runMode');
 const manualSection = document.getElementById('manualSection');
@@ -31,6 +37,12 @@ const statsSection = document.getElementById('statsSection');
 const sentCountEl = document.getElementById('sentCount');
 const failedCountEl = document.getElementById('failedCount');
 const pendingCountEl = document.getElementById('pendingCount');
+const autoSummarySection = document.getElementById('autoSummarySection');
+const autoTotalFoldersEl = document.getElementById('autoTotalFolders');
+const autoCompletedFoldersEl = document.getElementById('autoCompletedFolders');
+const autoIncompleteFoldersEl = document.getElementById('autoIncompleteFolders');
+const autoSkippedFoldersEl = document.getElementById('autoSkippedFolders');
+const autoFolderListEl = document.getElementById('autoFolderList');
 const currentImageSection = document.getElementById('currentImage');
 const currentImageName = document.getElementById('currentImageName');
 const logContainer = document.getElementById('logContainer');
@@ -40,6 +52,7 @@ runModeInput.addEventListener('change', () => {
   const isAuto = runModeInput.value === 'auto';
   manualSection.classList.toggle('hidden', isAuto);
   autoSection.classList.toggle('hidden', !isAuto);
+  autoSummarySection.classList.toggle('hidden', !isAuto);
   updateStartAvailability();
 });
 
@@ -93,6 +106,7 @@ runModeInput.dispatchEvent(new Event('change'));
 sendModeInput.dispatchEvent(new Event('change'));
 loadMappingFromRoot();
 updateStartAvailability();
+renderAutoFolderResults();
 
 async function startSending() {
   const tab = await ensureWhatsAppTab();
@@ -103,6 +117,9 @@ async function startSending() {
   failedCount = 0;
   failedImages = [];
   processedCount = 0;
+  autoCompletedCount = 0;
+  autoIncompleteCount = 0;
+  autoSkippedCount = 0;
 
   startBtn.textContent = 'Stop';
   startBtn.classList.add('stop');
@@ -113,10 +130,21 @@ async function startSending() {
   currentImageSection.classList.remove('hidden');
 
   if (runModeInput.value === 'auto') {
+    autoFolderResults = autoFolderResults.map(r => ({
+      ...r,
+      sent: 0,
+      failed: 0,
+      status: 'pending'
+    }));
+    autoSkippedCount = autoStaticSkippedCount;
+    recalcAutoSummaryCounts();
+    updateAutoSummary();
+    renderAutoFolderResults();
     totalPlanned = autoJobs.reduce((sum, job) => sum + job.files.length, 0);
     addLog(`Auto run started: ${autoJobs.length} folder(s), ${totalPlanned} image(s)`, 'info');
     await processAutoJobs(tab.id);
   } else {
+    updateAutoSummary();
     totalPlanned = manualImageFiles.length;
     addLog(`Manual run started: ${totalPlanned} image(s)`, 'info');
     await processFilesForCurrentChat(tab.id, manualImageFiles, 'Manual folder');
@@ -128,15 +156,26 @@ async function startSending() {
 }
 
 function stopSending() {
+  const wasRunning = isRunning;
   isRunning = false;
   startBtn.textContent = 'Start Sending';
   startBtn.classList.remove('stop');
   disableSelectors(false);
+
+  if (wasRunning && runModeInput.value === 'auto') {
+    markPendingFoldersSkipped(0);
+    recalcAutoSummaryCounts();
+    updateAutoSummary();
+    renderAutoFolderResults();
+  }
+
   addLog('Stopped by user', 'info');
 }
 
 async function processAutoJobs(tabId) {
-  for (const job of autoJobs) {
+  for (let idx = 0; idx < autoJobs.length; idx++) {
+    const job = autoJobs[idx];
+    const folderResult = autoFolderResults.find(r => r.id === job.id);
     if (!isRunning) return;
 
     currentImageName.textContent = `${job.folderName} -> ${job.chatName}`;
@@ -151,77 +190,100 @@ async function processAutoJobs(tabId) {
       failedCount += job.files.length;
       processedCount += job.files.length;
       failedImages.push(...job.files.map(f => `${job.folderName}/${f.name}`));
+      if (folderResult) {
+        folderResult.failed = folderResult.total;
+        folderResult.status = 'incomplete';
+      }
+      markPendingFoldersSkipped(idx + 1);
+      recalcAutoSummaryCounts();
       addLog(`Chat open failed for "${job.chatName}": ${openResponse?.error || 'Unknown error'}`, 'error');
       updateProgress();
+      updateAutoSummary();
+      renderAutoFolderResults();
       showStatus(`Stopped: chat not opened (${job.chatName})`, 'error');
       stopSending();
       return;
     }
 
     await sleep(300);
-    await processFilesForCurrentChat(tabId, job.files, `Folder ${job.folderName}`);
+    // eslint-disable-next-line no-await-in-loop
+    const folderOk = await processFilesForCurrentChat(tabId, job.files, `Folder ${job.folderName}`, folderResult);
+    if (folderOk) {
+      if (folderResult) folderResult.status = 'completed';
+    } else {
+      if (folderResult) folderResult.status = 'incomplete';
+    }
+    recalcAutoSummaryCounts();
+    updateAutoSummary();
+    renderAutoFolderResults();
   }
 }
 
-async function processFilesForCurrentChat(tabId, files, contextLabel) {
+async function processFilesForCurrentChat(tabId, files, contextLabel, folderResult = null) {
   if (sendModeInput.value === 'batch') {
-    await processFilesBatchMode(tabId, files, contextLabel);
+    return processFilesBatchMode(tabId, files, contextLabel, folderResult);
   } else {
-    await processFilesSingleMode(tabId, files, contextLabel);
+    return processFilesSingleMode(tabId, files, contextLabel, folderResult);
   }
 }
 
-async function processFilesSingleMode(tabId, files, contextLabel) {
+async function processFilesSingleMode(tabId, files, contextLabel, folderResult = null) {
+  let allSuccess = true;
   for (let i = 0; i < files.length; i++) {
-    if (!isRunning) return;
+    if (!isRunning) return false;
 
     const file = files[i];
     currentImageName.textContent = `${contextLabel}: ${file.name}`;
     // eslint-disable-next-line no-await-in-loop
-    await sendOneFile(tabId, file, contextLabel);
+    const ok = await sendOneFile(tabId, file, contextLabel, folderResult);
+    if (!ok) allSuccess = false;
 
-    if (!isRunning) return;
+    if (!isRunning) return false;
     if (i < files.length - 1) {
       // eslint-disable-next-line no-await-in-loop
       await sleep(getDelayMs());
     }
   }
+  return allSuccess;
 }
 
-async function processFilesBatchMode(tabId, files, contextLabel) {
+async function processFilesBatchMode(tabId, files, contextLabel, folderResult = null) {
   const chunkSize = getBatchSize();
+  let allSuccess = true;
 
   for (let start = 0; start < files.length; start += chunkSize) {
-    if (!isRunning) return;
+    if (!isRunning) return false;
 
     const end = Math.min(start + chunkSize, files.length);
     const chunk = files.slice(start, end);
     addLog(`${contextLabel}: fast chunk ${start + 1}-${end}`, 'info');
 
     for (let i = 0; i < chunk.length; i++) {
-      if (!isRunning) return;
+      if (!isRunning) return false;
 
       const file = chunk[i];
       currentImageName.textContent = `${contextLabel}: ${file.name}`;
       // eslint-disable-next-line no-await-in-loop
-      await sendOneFile(tabId, file, contextLabel);
+      const ok = await sendOneFile(tabId, file, contextLabel, folderResult);
+      if (!ok) allSuccess = false;
 
-      if (!isRunning) return;
+      if (!isRunning) return false;
       if (i < chunk.length - 1) {
         // eslint-disable-next-line no-await-in-loop
         await sleep(getBatchIntraDelayMs());
       }
     }
 
-    if (!isRunning) return;
+    if (!isRunning) return false;
     if (end < files.length) {
       // eslint-disable-next-line no-await-in-loop
       await sleep(getDelayMs());
     }
   }
+  return allSuccess;
 }
 
-async function sendOneFile(tabId, file, contextLabel) {
+async function sendOneFile(tabId, file, contextLabel, folderResult = null) {
   addLog(`Sending ${contextLabel}: ${file.name}`, 'info');
 
   try {
@@ -240,20 +302,29 @@ async function sendOneFile(tabId, file, contextLabel) {
 
     if (response && response.success) {
       sentCount++;
+      if (folderResult) folderResult.sent++;
       addLog(`Sent: ${file.name}`, 'success');
+      processedCount++;
+      updateProgress();
+      renderAutoFolderResults();
+      return true;
     } else {
       failedCount++;
+      if (folderResult) folderResult.failed++;
       failedImages.push(`${contextLabel}/${file.name}`);
       addLog(`Failed: ${file.name} - ${response?.error || 'Unknown error'}`, 'error');
     }
   } catch (err) {
     failedCount++;
+    if (folderResult) folderResult.failed++;
     failedImages.push(`${contextLabel}/${file.name}`);
     addLog(`Error: ${file.name} - ${err.message}`, 'error');
   }
 
   processedCount++;
   updateProgress();
+  renderAutoFolderResults();
+  return false;
 }
 
 function finishSending() {
@@ -264,6 +335,13 @@ function finishSending() {
 
   addLog('All items processed', 'success');
   showStatus(`Completed. Sent: ${sentCount}, Failed: ${failedCount}`, 'success');
+
+  if (runModeInput.value === 'auto') {
+    addLog(
+      `Auto folders -> Total: ${autoTotalFolderCount}, Completed: ${autoCompletedCount}, Incomplete: ${autoIncompleteCount}, Skipped: ${autoSkippedCount}`,
+      'info'
+    );
+  }
 
   if (failedImages.length > 0) {
     addLog(`Failed list: ${failedImages.join(', ')}`, 'error');
@@ -293,9 +371,18 @@ async function ensureWhatsAppTab() {
 
 async function rebuildAutoJobs() {
   autoJobs = [];
+  autoFolderResults = [];
 
   if (!baseFolderHandle || mappingLower.size === 0) {
-    autoJobsInfo.textContent = 'Select base folder and mapping JSON to prepare jobs';
+    autoTotalFolderCount = 0;
+    autoStaticSkippedCount = 0;
+    autoCompletedCount = 0;
+    autoIncompleteCount = 0;
+    autoSkippedCount = 0;
+    autoFolderResults = [];
+    updateAutoSummary();
+    renderAutoFolderResults();
+    autoJobsInfo.textContent = 'Select base folder and ensure mapping.json is configured';
     updateStartAvailability();
     return;
   }
@@ -303,6 +390,7 @@ async function rebuildAutoJobs() {
   let totalFolders = 0;
   let mappedFolders = 0;
   let totalImages = 0;
+  let jobId = 0;
 
   for await (const entry of baseFolderHandle.values()) {
     if (entry.kind !== 'directory') continue;
@@ -315,10 +403,27 @@ async function rebuildAutoJobs() {
     const files = await getImagesFromDirectory(entry);
     if (files.length === 0) continue;
 
-    autoJobs.push({ folderName, chatName, files });
+    autoJobs.push({ id: jobId++, folderName, chatName, files });
     mappedFolders++;
     totalImages += files.length;
   }
+
+  autoTotalFolderCount = totalFolders;
+  autoStaticSkippedCount = Math.max(0, totalFolders - mappedFolders);
+  autoCompletedCount = 0;
+  autoIncompleteCount = 0;
+  autoSkippedCount = autoStaticSkippedCount;
+  autoFolderResults = autoJobs.map(job => ({
+    id: job.id,
+    folderName: job.folderName,
+    chatName: job.chatName,
+    total: job.files.length,
+    sent: 0,
+    failed: 0,
+    status: 'pending'
+  }));
+  updateAutoSummary();
+  renderAutoFolderResults();
 
   autoJobsInfo.textContent = `${mappedFolders}/${totalFolders} folders mapped, ${totalImages} images ready`;
   addLog(`Auto jobs ready: ${mappedFolders} folders, ${totalImages} images`, 'info');
@@ -340,6 +445,14 @@ async function loadMappingFromRoot() {
     await rebuildAutoJobs();
   } catch (err) {
     mappingLower = new Map();
+    autoTotalFolderCount = 0;
+    autoStaticSkippedCount = 0;
+    autoCompletedCount = 0;
+    autoIncompleteCount = 0;
+    autoSkippedCount = 0;
+    autoFolderResults = [];
+    updateAutoSummary();
+    renderAutoFolderResults();
     mappingInfo.textContent = 'Mapping load failed: check mapping.json';
     addLog(`Failed to load mapping.json: ${err.message}`, 'error');
     updateStartAvailability();
@@ -394,6 +507,61 @@ function updateProgress() {
   const pct = totalPlanned > 0 ? (processedCount / totalPlanned) * 100 : 0;
   progressFill.style.width = `${pct}%`;
   progressText.textContent = `${processedCount} / ${totalPlanned}`;
+}
+
+function updateAutoSummary() {
+  autoTotalFoldersEl.textContent = autoTotalFolderCount;
+  autoCompletedFoldersEl.textContent = autoCompletedCount;
+  autoIncompleteFoldersEl.textContent = autoIncompleteCount;
+  autoSkippedFoldersEl.textContent = autoSkippedCount;
+}
+
+function recalcAutoSummaryCounts() {
+  const completed = autoFolderResults.filter(r => r.status === 'completed').length;
+  const incomplete = autoFolderResults.filter(r => r.status === 'incomplete').length;
+  const skippedFromJobs = autoFolderResults.filter(r => r.status === 'skipped').length;
+
+  autoCompletedCount = completed;
+  autoIncompleteCount = incomplete;
+  autoSkippedCount = autoStaticSkippedCount + skippedFromJobs;
+}
+
+function markPendingFoldersSkipped(startIndex = 0) {
+  for (let i = startIndex; i < autoJobs.length; i++) {
+    const result = autoFolderResults.find(r => r.id === autoJobs[i].id);
+    if (result && result.status === 'pending') {
+      result.status = 'skipped';
+    }
+  }
+}
+
+function renderAutoFolderResults() {
+  if (!autoFolderListEl) return;
+  if (autoFolderResults.length === 0) {
+    autoFolderListEl.innerHTML = '';
+    return;
+  }
+
+  autoFolderListEl.innerHTML = autoFolderResults.map((r) => {
+    const statusClass = `auto-status-${r.status}`;
+    return `<div class="auto-folder-row">
+      <div>${escapeHtml(r.folderName)}</div>
+      <div>${escapeHtml(r.chatName)}</div>
+      <div>${r.total}</div>
+      <div>${r.sent}</div>
+      <div>${r.failed}</div>
+      <div class="${statusClass}">${r.status}</div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function updateStartAvailability() {

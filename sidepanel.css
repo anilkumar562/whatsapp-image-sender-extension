@@ -154,6 +154,40 @@ select {
   font-size: 12px;
 }
 
+.auto-list-header {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #666;
+}
+
+.auto-folder-list {
+  margin-top: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.auto-folder-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1.4fr 0.6fr 0.6fr 0.6fr 0.9fr;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f2f2f2;
+  font-size: 11px;
+  align-items: center;
+}
+
+.auto-folder-row:last-child {
+  border-bottom: none;
+}
+
+.auto-status-pending { color: #777; }
+.auto-status-completed { color: #28a745; }
+.auto-status-incomplete { color: #dc3545; }
+.auto-status-skipped { color: #d39e00; }
+
 .log-entry {
   padding: 4px 0;
   border-bottom: 1px solid #f0f0f0;

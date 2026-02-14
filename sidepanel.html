@@ -88,6 +88,30 @@
       </div>
     </div>
 
+    <div id="autoSummarySection" class="section hidden">
+      <label>Auto Summary (Folders)</label>
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Total</span>
+          <span id="autoTotalFolders" class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Completed</span>
+          <span id="autoCompletedFolders" class="stat-value success">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Incomplete</span>
+          <span id="autoIncompleteFolders" class="stat-value error">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Skipped</span>
+          <span id="autoSkippedFolders" class="stat-value pending">0</span>
+        </div>
+      </div>
+      <div class="auto-list-header">Folder | Chat | Total | Sent | Failed | Status</div>
+      <div id="autoFolderList" class="auto-folder-list"></div>
+    </div>
+
     <div id="currentImage" class="section hidden">
       <label>Current Item</label>
       <div id="currentImageName" class="current-image-name"></div>
