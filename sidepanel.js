@@ -24,6 +24,7 @@ let lastRunReport = null;
 const runModeInput = document.getElementById('runMode');
 const manualSection = document.getElementById('manualSection');
 const autoSection = document.getElementById('autoSection');
+const autoFolderTableSection = document.getElementById('autoFolderTableSection');
 const selectFolderBtn = document.getElementById('selectFolder');
 const folderInfo = document.getElementById('folderInfo');
 const selectBaseFolderBtn = document.getElementById('selectBaseFolder');
@@ -34,18 +35,12 @@ const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const stopBtn = document.getElementById('stopBtn');
 const exportBtn = document.getElementById('exportBtn');
-const delayInput = document.getElementById('delay');
 const captionInput = document.getElementById('caption');
 const useImageNameCaptionInput = document.getElementById('useImageNameCaption');
-const sendModeInput = document.getElementById('sendMode');
-const batchSizeInput = document.getElementById('batchSize');
+const fastModeToggle = document.getElementById('fastModeToggle');
 const progressSection = document.getElementById('progressSection');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
-const statsSection = document.getElementById('statsSection');
-const sentCountEl = document.getElementById('sentCount');
-const failedCountEl = document.getElementById('failedCount');
-const pendingCountEl = document.getElementById('pendingCount');
 const autoSummarySection = document.getElementById('autoSummarySection');
 const autoTotalFoldersEl = document.getElementById('autoTotalFolders');
 const autoCompletedFoldersEl = document.getElementById('autoCompletedFolders');
@@ -63,13 +58,16 @@ runModeInput.addEventListener('change', () => {
   const isAuto = runModeInput.value === 'auto';
   manualSection.classList.toggle('hidden', isAuto);
   autoSection.classList.toggle('hidden', !isAuto);
+  autoFolderTableSection.classList.toggle('hidden', !isAuto);
   autoSummarySection.classList.toggle('hidden', !isAuto);
   setActionMessage('');
   updateStartAvailability();
 });
 
-sendModeInput.addEventListener('change', () => {
-  batchSizeInput.disabled = sendModeInput.value !== 'batch' || isRunning;
+fastModeToggle.addEventListener('change', () => {
+  if (!isRunning) {
+    setActionMessage('');
+  }
 });
 
 selectFolderBtn.addEventListener('click', async () => {
@@ -135,7 +133,6 @@ exportBtn.addEventListener('click', () => {
 });
 
 runModeInput.dispatchEvent(new Event('change'));
-sendModeInput.dispatchEvent(new Event('change'));
 loadMappingFromRoot();
 updateStartAvailability();
 renderAutoFolderResults();
@@ -176,7 +173,6 @@ async function startSending() {
   updateActionButtons();
 
   progressSection.classList.remove('hidden');
-  statsSection.classList.remove('hidden');
   currentImageSection.classList.remove('hidden');
 
   if (runModeInput.value === 'auto') {
@@ -269,7 +265,7 @@ async function processAutoJobs(tabId) {
     );
 
     if (folderResult) {
-      folderResult.status = folderOk ? 'completed' : 'incomplete';
+      folderResult.status = folderOk ? 'complete' : 'incomplete';
     }
     recalcAutoSummaryCounts();
     updateAutoSummary();
@@ -279,7 +275,7 @@ async function processAutoJobs(tabId) {
 }
 
 async function processFilesForCurrentChat(tabId, files, contextLabel, folderResult = null, runMeta = null) {
-  if (sendModeInput.value === 'batch') {
+  if (isFastMode()) {
     return processFilesBatchMode(tabId, files, contextLabel, folderResult, runMeta);
   }
   return processFilesSingleMode(tabId, files, contextLabel, folderResult, runMeta);
@@ -298,7 +294,7 @@ async function processFilesSingleMode(tabId, files, contextLabel, folderResult =
 
     if (!isRunning) return false;
     if (i < files.length - 1) {
-      await sleepWithPause(getDelayMs());
+      await sleepWithPause(getRandomDelayMs());
     }
   }
   return allSuccess;
@@ -333,7 +329,7 @@ async function processFilesBatchMode(tabId, files, contextLabel, folderResult = 
 
     if (!isRunning) return false;
     if (end < files.length) {
-      await sleepWithPause(getDelayMs());
+      await sleepWithPause(getRandomDelayMs());
     }
   }
   return allSuccess;
@@ -400,7 +396,7 @@ function finishSending() {
   showStatus(`Completed. Sent: ${sentCount}, Failed: ${failedCount}`, 'success');
 
   if (runModeInput.value === 'auto') {
-    addLog(`Auto folders -> Total: ${autoTotalFolderCount}, Completed: ${autoCompletedCount}, Incomplete: ${autoIncompleteCount}, Skipped: ${autoSkippedCount}`, 'info');
+    addLog(`Auto folders -> Total: ${autoTotalFolderCount}, Complete: ${autoCompletedCount}, Incomplete: ${autoIncompleteCount}, Skipped: ${autoSkippedCount}`, 'info');
   }
 
   if (failedImages.length > 0) {
@@ -408,6 +404,7 @@ function finishSending() {
   }
 
   finalizeRunReport('completed');
+  exportRunResult(true);
   updateActionButtons();
   updateLiveSummary();
 }
@@ -561,10 +558,6 @@ async function getImagesFromDirectory(dirHandle) {
 }
 
 function updateProgress() {
-  sentCountEl.textContent = sentCount;
-  failedCountEl.textContent = failedCount;
-  pendingCountEl.textContent = Math.max(0, totalPlanned - processedCount);
-
   const pct = totalPlanned > 0 ? (processedCount / totalPlanned) * 100 : 0;
   progressFill.style.width = `${pct}%`;
   progressText.textContent = `${processedCount} / ${totalPlanned}`;
@@ -578,7 +571,7 @@ function updateAutoSummary() {
 }
 
 function recalcAutoSummaryCounts() {
-  const completed = autoFolderResults.filter(r => r.status === 'completed').length;
+  const completed = autoFolderResults.filter(r => r.status === 'complete').length;
   const incomplete = autoFolderResults.filter(r => r.status === 'incomplete').length;
   const skippedFromJobs = autoFolderResults.filter(r => r.status === 'skipped').length;
 
@@ -602,7 +595,7 @@ function renderAutoFolderResults() {
   }
 
   const rows = autoFolderResults.map((r) => {
-    const statusClass = `auto-status-${r.status}`;
+    const statusClass = `auto-status-${r.status}${r.id === activeAutoFolderId ? ' auto-row-active' : ''}`;
     return `<tr>
       <td>${escapeHtml(r.folderName)}</td>
       <td>${escapeHtml(r.chatName)}</td>
@@ -642,9 +635,7 @@ function disableSelectors(disabled) {
   runModeInput.disabled = disabled;
   selectFolderBtn.disabled = disabled;
   selectBaseFolderBtn.disabled = disabled;
-  sendModeInput.disabled = disabled;
-  batchSizeInput.disabled = disabled || sendModeInput.value !== 'batch';
-  delayInput.disabled = disabled;
+  fastModeToggle.disabled = disabled;
   captionInput.disabled = disabled;
   useImageNameCaptionInput.disabled = disabled;
 }
@@ -683,15 +674,18 @@ function buildCaptionForFile(file) {
 }
 
 function getBatchSize() {
-  const batchSize = parseInt(batchSizeInput.value, 10);
-  if (!Number.isFinite(batchSize)) return 10;
-  return Math.min(Math.max(batchSize, 1), 50);
+  return 10;
 }
 
-function getDelayMs() {
-  const seconds = parseInt(delayInput.value, 10);
-  if (!Number.isFinite(seconds)) return 3000;
-  return Math.min(Math.max(seconds, 1), 60) * 1000;
+function isFastMode() {
+  return !!fastModeToggle.checked;
+}
+
+function getRandomDelayMs() {
+  const min = 2;
+  const max = 10;
+  const sec = Math.floor(Math.random() * (max - min + 1)) + min;
+  return sec * 1000;
 }
 
 function getBatchIntraDelayMs() {
@@ -728,7 +722,7 @@ function buildImageResultRecord(file, runMeta, caption, status, error) {
   return {
     timestamp: new Date().toISOString(),
     mode: runModeInput.value,
-    sendMode: sendModeInput.value,
+    sendMode: isFastMode() ? 'fast' : 'slow',
     folder: runMeta?.folderName || 'manual',
     chat: runMeta?.chatName || 'current-chat',
     fileName: file.name,
@@ -765,7 +759,7 @@ function finalizeRunReport(runStatus) {
     meta: {
       runStatus,
       mode: runModeInput.value,
-      sendMode: sendModeInput.value,
+      sendMode: isFastMode() ? 'fast' : 'slow',
       useImageNameAsCaption: !!useImageNameCaptionInput.checked,
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
@@ -917,32 +911,14 @@ function resetRunData() {
 }
 
 function updateLiveSummary() {
-  if (!isRunning) {
-    liveSummaryEl.classList.add('hidden');
-    return;
-  }
-
   liveSummaryEl.classList.remove('hidden');
-  const state = isPaused ? 'Paused' : 'Running';
-  const current = (currentImageName.textContent || '').trim();
   const pending = Math.max(0, totalPlanned - processedCount);
-  const currentText = current || '-';
-  const activeFolder = runModeInput.value === 'auto'
-    ? autoFolderResults.find(r => r.id === activeAutoFolderId)
-    : null;
-  const autoFolderLine = activeFolder
-    ? `<div class="live-folder"><span>Folder: ${escapeHtml(activeFolder.folderName)}</span><span>Chat: ${escapeHtml(activeFolder.chatName)}</span><span>Total: ${activeFolder.total}</span><span>Sent: ${activeFolder.sent}</span><span>Failed: ${activeFolder.failed}</span><span>Status: ${activeFolder.status}</span></div>`
-    : '';
-
   liveSummaryEl.innerHTML = `
     <div class="live-cards">
       <div class="live-card"><span>Sent</span><strong>${sentCount}</strong></div>
       <div class="live-card"><span>Failed</span><strong>${failedCount}</strong></div>
       <div class="live-card"><span>Pending</span><strong>${pending}</strong></div>
     </div>
-    ${autoFolderLine}
-    <div class="live-current"><span>Current Item</span><strong>${escapeHtml(currentText)}</strong></div>
-    <div class="live-meta"><span>Status: ${state}</span><span>Mode: ${runModeInput.value}</span></div>
   `;
 }
 

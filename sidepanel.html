@@ -34,12 +34,11 @@
     </div>
 
     <div class="section">
-      <label>Send Mode</label>
-      <select id="sendMode">
-        <option value="single" selected>Single (one by one)</option>
-        <option value="batch">Batch (fast chunks)</option>
-      </select>
-      <div class="info-text">Default is Single</div>
+      <label>
+        <input type="checkbox" id="fastModeToggle">
+        Fast Mode (ON = fast, OFF = slow)
+      </label>
+      <div class="info-text">Slow is default</div>
     </div>
 
     <div class="section">
@@ -55,58 +54,6 @@
       </label>
     </div>
 
-    <div class="section">
-      <label>Batch Size</label>
-      <input type="number" id="batchSize" value="10" min="1" max="50">
-      <div class="info-text">Fast chunk size; images are still sent one by one</div>
-    </div>
-
-    <div class="section">
-      <label>Delay Between Sends (seconds)</label>
-      <input type="number" id="delay" value="5" min="1" max="60">
-      <div class="info-text">Single: delay per image. Batch: delay between chunks only</div>
-    </div>
-
-    <div id="statsSection" class="section hidden">
-      <div class="stats">
-        <div class="stat">
-          <span class="stat-label">Sent</span>
-          <span id="sentCount" class="stat-value success">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Failed</span>
-          <span id="failedCount" class="stat-value error">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Pending</span>
-          <span id="pendingCount" class="stat-value pending">0</span>
-        </div>
-      </div>
-    </div>
-
-    <div id="autoSummarySection" class="section hidden">
-      <label>Auto Summary (Folders)</label>
-      <div class="stats">
-        <div class="stat">
-          <span class="stat-label">Total</span>
-          <span id="autoTotalFolders" class="stat-value">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Completed</span>
-          <span id="autoCompletedFolders" class="stat-value success">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Incomplete</span>
-          <span id="autoIncompleteFolders" class="stat-value error">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Skipped</span>
-          <span id="autoSkippedFolders" class="stat-value pending">0</span>
-        </div>
-      </div>
-      <div id="autoFolderList" class="auto-folder-list"></div>
-    </div>
-
     <div id="currentImage" class="section hidden">
       <label>Current Item</label>
       <div id="currentImageName" class="current-image-name"></div>
@@ -119,6 +66,11 @@
 
     <div id="statusMessage" class="status-message"></div>
 
+    <div id="autoFolderTableSection" class="section hidden">
+      <label>Folder Summary</label>
+      <div id="autoFolderList" class="auto-folder-list"></div>
+    </div>
+
     <div class="bottom-space"></div>
   </div>
 
@@ -128,6 +80,26 @@
         <div id="progressFill" class="progress-fill"></div>
       </div>
       <div id="progressText" class="progress-text">0 / 0</div>
+    </div>
+    <div id="autoSummarySection" class="hidden">
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Total</span>
+          <span id="autoTotalFolders" class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Complete</span>
+          <span id="autoCompletedFolders" class="stat-value success">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Incomplete</span>
+          <span id="autoIncompleteFolders" class="stat-value error">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Skipped</span>
+          <span id="autoSkippedFolders" class="stat-value pending">0</span>
+        </div>
+      </div>
     </div>
     <div id="liveSummary" class="live-summary hidden">Running summary</div>
     <div class="bottom-actions">

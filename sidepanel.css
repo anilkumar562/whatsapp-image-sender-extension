@@ -185,9 +185,13 @@ select {
 }
 
 .auto-status-pending { color: #777; }
-.auto-status-completed { color: #28a745; }
+.auto-status-complete { color: #28a745; }
 .auto-status-incomplete { color: #dc3545; }
 .auto-status-skipped { color: #d39e00; }
+
+.auto-row-active {
+  background: #ecfdf5;
+}
 
 .log-entry {
   padding: 4px 0;
@@ -240,12 +244,7 @@ select {
 }
 
 .live-summary {
-  font-size: 12px;
-  color: #1f2937;
-  background: #f3f6f9;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 8px;
+  padding: 0;
   margin-bottom: 8px;
 }
 
@@ -257,7 +256,7 @@ select {
 }
 
 .live-card {
-  background: #fff;
+  background: #f0f0f0;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   text-align: center;
@@ -273,47 +272,6 @@ select {
 .live-card strong {
   font-size: 16px;
   color: #128C7E;
-}
-
-.live-current {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-}
-
-.live-current span {
-  display: block;
-  font-size: 11px;
-  color: #666;
-  margin-bottom: 2px;
-}
-
-.live-current strong {
-  font-size: 12px;
-  font-weight: 500;
-  color: #222;
-}
-
-.live-folder {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-  font-size: 11px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 8px;
-}
-
-.live-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  color: #4b5563;
 }
 
 .bottom-actions {
